@@ -12,6 +12,7 @@
     public class EmployeeSkillDto
     {
         public int Id { get; set; }
+        public int EmployeeId { get; set; }
         public int SkillId { get; set; }
         public string SkillName { get; set; }
         public string Category { get; set; }

@@ -73,5 +73,12 @@ namespace DepartmentalSystemAPI.Controllers
             var skills = await _skillService.GetProjectRequiredSkillsAsync(projectId);
             return Ok(skills);
         }
+        [HttpGet("employee/{employeeId}")]
+        public async Task<ActionResult<List<EmployeeSkillDto>>> GetEmployeeSkills(int employeeId)
+        {
+            var employeeSkills = await _skillService.GetEmployeeSkillsAsync(employeeId);
+            return Ok(employeeSkills);
+        }
+
     }
 }

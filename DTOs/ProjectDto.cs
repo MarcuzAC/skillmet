@@ -16,8 +16,11 @@
         public int TaskCount { get; set; }
         public int CompletedTasks { get; set; }
         public string ClientName { get; set; }
-        // Add this line
         public string AssignedToUserName { get; set; }
+
+        // Add these properties for employee-specific project views
+        public int MyTaskCount { get; set; }
+        public int MyCompletedTasks { get; set; }
     }
 
     public class ProjectDetailDto
@@ -35,7 +38,6 @@
         public int EstimatedHours { get; set; }
         public int ActualHours { get; set; }
         public string ClientName { get; set; }
-        // Add this line
         public string AssignedToUserName { get; set; }
         public List<ProjectTaskDto> Tasks { get; set; } = new();
         public List<ProjectSkillDto> RequiredSkills { get; set; } = new();
@@ -52,7 +54,6 @@
         public decimal Budget { get; set; }
         public int EstimatedHours { get; set; }
         public string ClientName { get; set; }
-        // Add this line
         public string AssignedToUserName { get; set; }
     }
 }

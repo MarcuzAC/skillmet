@@ -1,3 +1,4 @@
+using DotNetEnv; // Add this using statement
 using DepartmentalSystemAPI.Data;
 using DepartmentalSystemAPI.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -7,6 +8,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+
+// Load .env file BEFORE creating the builder
+Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -93,8 +97,6 @@ builder.Services.AddScoped<ISkillService, SkillService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAdService, AdService>();
-
-// ADD EMAIL SERVICES HERE
 builder.Services.AddScoped<IEmailService, EmailService>();
 
 
@@ -126,7 +128,7 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.Zero
     };
 })
-.AddNegotiate(); // Windows Authentication
+.AddNegotiate();
 
 // Authorization
 builder.Services.AddAuthorization(options =>
@@ -137,7 +139,7 @@ builder.Services.AddAuthorization(options =>
         .Build();
 });
 
-// Enhanced CORS configuration
+//CORS configuration
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowSwaggerAndReact", policy =>
@@ -163,7 +165,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Departmental System API v1");
-        c.RoutePrefix = "swagger"; // This makes Swagger available at /swagger
+        c.RoutePrefix = "swagger";
         c.OAuthClientId("swagger-ui");
         c.OAuthAppName("Departmental System API - Swagger");
         c.OAuthUsePkce();
@@ -175,7 +177,7 @@ app.UseCors("AllowSwaggerAndReact");
 app.UseHttpsRedirection();
 app.UseRouting();
 
-// Authentication & Authorization MUST be in this order
+// Authentication & Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 

@@ -13,5 +13,6 @@ namespace DepartmentalSystemAPI.Services
         Task<bool> RemoveEmployeeSkillAsync(int employeeId, int skillId);
         Task<List<EmployeeDto>> GetEmployeesBySkillAsync(int skillId, int minProficiency = 1);
         Task<List<SkillDto>> GetProjectRequiredSkillsAsync(int projectId);
+        Task<List<EmployeeSkillDto>> GetEmployeeSkillsAsync(int employeeId);
     }
 }

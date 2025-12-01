@@ -47,6 +47,28 @@ namespace DepartmentalSystemAPI.Services
             }
             return new List<SkillDto>();
         }
+        public async Task<List<EmployeeSkillDto>> GetEmployeeSkillsAsync(int employeeId)
+        {
+            var employeeSkills = await _context.EmployeeSkills
+                .Include(es => es.Skill)
+                .Include(es => es.Employee)
+                .Where(es => es.EmployeeId == employeeId)
+                .Select(es => new EmployeeSkillDto
+                {
+                    Id = es.Id,
+                    EmployeeId = es.EmployeeId,
+                    SkillId = es.SkillId,
+                    SkillName = es.Skill.Name,
+                    Category = es.Skill.Category.ToString(),
+                    ProficiencyLevel = es.ProficiencyLevel,
+                    YearsOfExperience = es.YearsOfExperience,
+                    LastUsed = es.LastUsed,
+                    IsCertified = es.IsCertified
+                })
+                .ToListAsync();
+
+            return employeeSkills;
+        }
 
         public async Task<Skill> CreateSkillAsync(Skill skill)
         {

@@ -16,6 +16,7 @@ namespace DepartmentalSystemAPI.Controllers
             _projectService = projectService;
         }
 
+        // Existing endpoints
         [HttpGet]
         public async Task<ActionResult<List<ProjectDto>>> GetAllProjects()
         {
@@ -51,6 +52,64 @@ namespace DepartmentalSystemAPI.Controllers
             var ganttData = await _projectService.GetProjectGanttChartAsync(id);
             if (ganttData == null) return NotFound();
             return Ok(ganttData);
+        }
+
+        // NEW: Role-based Gantt chart
+        [HttpGet("{id}/gantt/role")]
+        public async Task<ActionResult<GanttChartDto>> GetProjectGanttWithRole(int id, [FromQuery] int userId, [FromQuery] string userRole)
+        {
+            var ganttData = await _projectService.GetProjectGanttChartAsync(id, userId, userRole);
+            if (ganttData == null) return NotFound();
+            return Ok(ganttData);
+        }
+
+        // NEW: Portfolio Gantt for Admins
+        [HttpGet("gantt/portfolio")]
+        public async Task<ActionResult<GanttChartDto>> GetPortfolioGantt()
+        {
+            var ganttData = await _projectService.GetPortfolioGanttChartAsync();
+            return Ok(ganttData);
+        }
+
+        // NEW: Personal Gantt for Employees
+        [HttpGet("gantt/personal/{employeeId}")]
+        public async Task<ActionResult<GanttChartDto>> GetPersonalGantt(int employeeId)
+        {
+            var ganttData = await _projectService.GetPersonalGanttChartAsync(employeeId);
+            return Ok(ganttData);
+        }
+
+        // NEW: Employee projects
+        [HttpGet("employee/{employeeId}")]
+        public async Task<ActionResult<List<ProjectDto>>> GetEmployeeProjects(int employeeId)
+        {
+            var projects = await _projectService.GetEmployeeProjectsAsync(employeeId);
+            return Ok(projects);
+        }
+
+        // NEW: Managed projects
+        [HttpGet("manager/{managerUserName}")]
+        public async Task<ActionResult<List<ProjectDto>>> GetManagedProjects(string managerUserName)
+        {
+            var projects = await _projectService.GetManagedProjectsAsync(managerUserName);
+            return Ok(projects);
+        }
+
+        // NEW: Employee workload summary
+        [HttpGet("employee/{employeeId}/workload-summary")]
+        public async Task<ActionResult<WorkloadDto>> GetEmployeeWorkloadSummary(int employeeId)
+        {
+            var workload = await _projectService.GetEmployeeWorkloadSummaryAsync(employeeId);
+            if (workload == null) return NotFound();
+            return Ok(workload);
+        }
+
+        // NEW: Employee upcoming deadlines
+        [HttpGet("employee/{employeeId}/deadlines")]
+        public async Task<ActionResult<List<EmployeeTaskDto>>> GetUpcomingEmployeeDeadlines(int employeeId, [FromQuery] int daysAhead = 7)
+        {
+            var deadlines = await _projectService.GetUpcomingEmployeeDeadlinesAsync(employeeId, daysAhead);
+            return Ok(deadlines);
         }
 
         [HttpPost]

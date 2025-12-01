@@ -190,3 +190,4 @@ C:\Users\mchithenga\source\repos\DepartmentalSystemAPIs\DepartmentalSystemAPIs\b
 C:\Users\mchithenga\source\repos\DepartmentalSystemAPIs\DepartmentalSystemAPIs\bin\Debug\net8.0\Microsoft.Kiota.Serialization.Multipart.dll
 C:\Users\mchithenga\source\repos\DepartmentalSystemAPIs\DepartmentalSystemAPIs\bin\Debug\net8.0\Microsoft.Kiota.Serialization.Text.dll
 C:\Users\mchithenga\source\repos\DepartmentalSystemAPIs\DepartmentalSystemAPIs\bin\Debug\net8.0\Std.UriTemplate.dll
+C:\Users\mchithenga\source\repos\DepartmentalSystemAPIs\DepartmentalSystemAPIs\obj\Debug\net8.0\DepartmentalSystemAPIs.sourcelink.json

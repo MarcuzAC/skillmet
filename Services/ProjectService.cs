@@ -17,7 +17,7 @@ namespace DepartmentalSystemAPI.Services
         {
             _context = context;
             _emailService = emailService;
-            _employeeService = employeeService; // FIXED: Changed from _userService
+            _employeeService = employeeService;
             _logger = logger;
         }
 
@@ -41,7 +41,7 @@ namespace DepartmentalSystemAPI.Services
                     TaskCount = p.Tasks.Count,
                     CompletedTasks = p.Tasks.Count(t => t.Status == ProjectTaskStatus.Completed),
                     ClientName = p.ClientName,
-                    AssignedToUserName = p.AssignedToUserName // FIXED: Use the string field directly
+                    AssignedToUserName = p.AssignedToUserName
                 })
                 .OrderByDescending(p => p.Priority)
                 .ThenByDescending(p => p.Deadline)
@@ -68,11 +68,10 @@ namespace DepartmentalSystemAPI.Services
                     TaskCount = p.Tasks.Count,
                     CompletedTasks = p.Tasks.Count(t => t.Status == ProjectTaskStatus.Completed),
                     ClientName = p.ClientName,
-                    AssignedToUserName = p.AssignedToUserName // FIXED: Use the string field directly
+                    AssignedToUserName = p.AssignedToUserName
                 })
                 .ToListAsync();
 
-            // Sort in memory instead of in the database
             return projects.OrderBy(p => GetPriorityOrder(p.Priority))
                           .ThenByDescending(p => p.Deadline)
                           .ToList();
@@ -113,7 +112,7 @@ namespace DepartmentalSystemAPI.Services
                         TaskCount = p.Tasks.Count,
                         CompletedTasks = p.Tasks.Count(t => t.Status == ProjectTaskStatus.Completed),
                         ClientName = p.ClientName,
-                        AssignedToUserName = p.AssignedToUserName // FIXED: Use the string field directly
+                        AssignedToUserName = p.AssignedToUserName
                     })
                     .ToListAsync();
             }
@@ -150,7 +149,7 @@ namespace DepartmentalSystemAPI.Services
                 EstimatedHours = project.EstimatedHours,
                 ActualHours = project.ActualHours,
                 ClientName = project.ClientName,
-                AssignedToUserName = project.AssignedToUserName, // FIXED: Use the string field directly
+                AssignedToUserName = project.AssignedToUserName,
                 Tasks = project.Tasks.Select(t => new ProjectTaskDto
                 {
                     Id = t.Id,
@@ -256,6 +255,282 @@ namespace DepartmentalSystemAPI.Services
             };
         }
 
+        // NEW: Role-based Gantt chart
+        public async Task<GanttChartDto> GetProjectGanttChartAsync(int projectId, int userId, string userRole)
+        {
+            var project = await _context.Projects
+                .Include(p => p.Tasks)
+                    .ThenInclude(t => t.AssignedTo)
+                .Include(p => p.Tasks)
+                    .ThenInclude(t => t.PredecessorTask)
+                .FirstOrDefaultAsync(p => p.Id == projectId);
+
+            if (project == null) return null;
+
+            // Filter tasks based on user role
+            var tasksQuery = project.Tasks.AsQueryable();
+
+            if (userRole == "Employee")
+            {
+                tasksQuery = tasksQuery.Where(t => t.AssignedToId == userId);
+            }
+            // Project Managers and Admins see all tasks
+
+            var tasks = await tasksQuery
+                .Select(t => new GanttTaskDto
+                {
+                    Id = t.Id,
+                    Text = t.Title,
+                    StartDate = t.StartDate,
+                    Duration = t.DurationDays,
+                    Progress = t.Progress / 100.0,
+                    Status = t.Status.ToString(),
+                    Priority = t.Priority.ToString(),
+                    AssignedTo = t.AssignedTo != null ? $"{t.AssignedTo.FirstName} {t.AssignedTo.LastName}" : "Unassigned",
+                    Type = "task"
+                })
+                .ToListAsync();
+
+            // Only include dependencies for managers and admins
+            var dependencies = userRole == "Employee" ?
+                new List<GanttDependencyDto>() :
+                project.Tasks
+                    .Where(t => t.PredecessorTaskId.HasValue)
+                    .Select(t => new GanttDependencyDto
+                    {
+                        Id = t.Id,
+                        From = t.PredecessorTaskId.Value,
+                        To = t.Id,
+                        Type = "finish_to_start"
+                    }).ToList();
+
+            return new GanttChartDto
+            {
+                ProjectId = project.Id,
+                ProjectName = project.Name,
+                Tasks = tasks,
+                Dependencies = dependencies
+            };
+        }
+
+        // NEW: Portfolio Gantt Chart for Admins
+        public async Task<GanttChartDto> GetPortfolioGanttChartAsync()
+        {
+            var projects = await _context.Projects
+                .Include(p => p.Tasks)
+                    .ThenInclude(t => t.AssignedTo)
+                .Include(p => p.Tasks)
+                    .ThenInclude(t => t.PredecessorTask)
+                .ToListAsync();
+
+            var portfolioTasks = projects.SelectMany(p => p.Tasks.Select(t => new GanttTaskDto
+            {
+                Id = t.Id,
+                Text = $"{p.Name} - {t.Title}",
+                StartDate = t.StartDate,
+                Duration = t.DurationDays,
+                Progress = t.Progress / 100.0,
+                Status = t.Status.ToString(),
+                Priority = t.Priority.ToString(),
+                AssignedTo = t.AssignedTo != null ? $"{t.AssignedTo.FirstName} {t.AssignedTo.LastName}" : "Unassigned",
+                Type = "task"
+            })).ToList();
+
+            var dependencies = projects.SelectMany(p => p.Tasks
+                .Where(t => t.PredecessorTaskId.HasValue)
+                .Select(t => new GanttDependencyDto
+                {
+                    Id = t.Id,
+                    From = t.PredecessorTaskId.Value,
+                    To = t.Id,
+                    Type = "finish_to_start"
+                })).ToList();
+
+            return new GanttChartDto
+            {
+                ProjectId = 0, // Portfolio view has no single project
+                ProjectName = "Portfolio Overview",
+                Tasks = portfolioTasks,
+                Dependencies = dependencies
+            };
+        }
+
+        // NEW: Personal Gantt Chart for Employees
+        public async Task<GanttChartDto> GetPersonalGanttChartAsync(int employeeId)
+        {
+            var employeeTasks = await _context.ProjectTasks
+                .Include(t => t.Project)
+                .Include(t => t.PredecessorTask)
+                .Where(t => t.AssignedToId == employeeId)
+                .OrderBy(t => t.StartDate)
+                .ToListAsync();
+
+            var tasks = employeeTasks.Select(t => new GanttTaskDto
+            {
+                Id = t.Id,
+                Text = $"{t.Project.Name} - {t.Title}",
+                StartDate = t.StartDate,
+                Duration = t.DurationDays,
+                Progress = t.Progress / 100.0,
+                Status = t.Status.ToString(),
+                Priority = t.Priority.ToString(),
+                AssignedTo = t.AssignedTo != null ? $"{t.AssignedTo.FirstName} {t.AssignedTo.LastName}" : "Unassigned",
+                Type = "task"
+            }).ToList();
+
+            // Only include dependencies that are relevant to the employee
+            var dependencies = employeeTasks
+                .Where(t => t.PredecessorTaskId.HasValue &&
+                           employeeTasks.Any(et => et.Id == t.PredecessorTaskId.Value))
+                .Select(t => new GanttDependencyDto
+                {
+                    Id = t.Id,
+                    From = t.PredecessorTaskId.Value,
+                    To = t.Id,
+                    Type = "finish_to_start"
+                }).ToList();
+
+            return new GanttChartDto
+            {
+                ProjectId = 0, // Personal view has no single project
+                ProjectName = "My Tasks Overview",
+                Tasks = tasks,
+                Dependencies = dependencies
+            };
+        }
+
+        // NEW: Get projects assigned to specific employee
+        public async Task<List<ProjectDto>> GetEmployeeProjectsAsync(int employeeId)
+        {
+            return await _context.Projects
+                .Include(p => p.Tasks)
+                .Where(p => p.Tasks.Any(t => t.AssignedToId == employeeId))
+                .Select(p => new ProjectDto
+                {
+                    Id = p.Id,
+                    Name = p.Name,
+                    Description = p.Description,
+                    StartDate = p.StartDate,
+                    EndDate = p.EndDate,
+                    Deadline = p.Deadline,
+                    Priority = p.Priority.ToString(),
+                    Status = p.Status.ToString(),
+                    Progress = p.Progress,
+                    EstimatedHours = p.EstimatedHours,
+                    ActualHours = p.ActualHours,
+                    TaskCount = p.Tasks.Count,
+                    CompletedTasks = p.Tasks.Count(t => t.Status == ProjectTaskStatus.Completed),
+                    ClientName = p.ClientName,
+                    AssignedToUserName = p.AssignedToUserName,
+                    MyTaskCount = p.Tasks.Count(t => t.AssignedToId == employeeId),
+                    MyCompletedTasks = p.Tasks.Count(t => t.AssignedToId == employeeId && t.Status == ProjectTaskStatus.Completed)
+                })
+                .ToListAsync();
+        }
+
+        // NEW: Get projects managed by specific user
+        public async Task<List<ProjectDto>> GetManagedProjectsAsync(string managerUserName)
+        {
+            return await _context.Projects
+                .Include(p => p.Tasks)
+                .Where(p => p.AssignedToUserName == managerUserName)
+                .Select(p => new ProjectDto
+                {
+                    Id = p.Id,
+                    Name = p.Name,
+                    Description = p.Description,
+                    StartDate = p.StartDate,
+                    EndDate = p.EndDate,
+                    Deadline = p.Deadline,
+                    Priority = p.Priority.ToString(),
+                    Status = p.Status.ToString(),
+                    Progress = p.Progress,
+                    EstimatedHours = p.EstimatedHours,
+                    ActualHours = p.ActualHours,
+                    TaskCount = p.Tasks.Count,
+                    CompletedTasks = p.Tasks.Count(t => t.Status == ProjectTaskStatus.Completed),
+                    ClientName = p.ClientName,
+                    AssignedToUserName = p.AssignedToUserName
+                })
+                .ToListAsync();
+        }
+
+        // NEW: Get employee workload summary for personal dashboard
+        public async Task<WorkloadDto> GetEmployeeWorkloadSummaryAsync(int employeeId)
+        {
+            var employee = await _context.Employees
+                .Include(e => e.AssignedTasks)
+                .ThenInclude(t => t.Project)
+                .FirstOrDefaultAsync(e => e.Id == employeeId);
+
+            if (employee == null) return null;
+
+            var weekStart = DateTime.UtcNow.AddDays(-7);
+            var completedTasksThisWeek = await _context.ProjectTasks
+                .CountAsync(t => t.AssignedToId == employeeId &&
+                               t.Status == ProjectTaskStatus.Completed &&
+                               t.ActualEndDate >= weekStart);
+
+            var totalHoursThisWeek = await _context.AssignmentHistories
+                .Where(ah => ah.EmployeeId == employeeId && ah.AssignedDate >= weekStart)
+                .SumAsync(ah => ah.HoursWorked);
+
+            var currentTasks = employee.AssignedTasks
+                .Where(t => t.Status != ProjectTaskStatus.Completed)
+                .Select(t => new EmployeeTaskDto
+                {
+                    TaskId = t.Id,
+                    TaskTitle = t.Title,
+                    ProjectName = t.Project?.Name ?? "No Project",
+                    DueDate = t.EndDate,
+                    Priority = t.Priority.ToString(),
+                    Progress = t.Progress,
+                    EstimatedHours = t.EstimatedHours,
+                    LoggedHours = t.ActualHours,
+                    Status = t.Status.ToString()
+                }).ToList();
+
+            return new WorkloadDto
+            {
+                EmployeeId = employee.Id,
+                EmployeeName = $"{employee.FirstName} {employee.LastName}",
+                Email = employee.Email,
+                Position = employee.Position,
+                CurrentWorkload = employee.CurrentWorkload,
+                AssignedTasks = employee.AssignedTasks.Count(t => t.Status != ProjectTaskStatus.Completed),
+                CompletedTasksThisWeek = completedTasksThisWeek,
+                TotalHoursThisWeek = (int)totalHoursThisWeek,
+                AvailabilityStatus = employee.Status.ToString(),
+                CurrentTasks = currentTasks
+            };
+        }
+
+        // NEW: Get upcoming deadlines for employee
+        public async Task<List<EmployeeTaskDto>> GetUpcomingEmployeeDeadlinesAsync(int employeeId, int daysAhead = 7)
+        {
+            var deadlineDate = DateTime.UtcNow.AddDays(daysAhead);
+
+            return await _context.ProjectTasks
+                .Include(t => t.Project)
+                .Where(t => t.AssignedToId == employeeId &&
+                           t.Status != ProjectTaskStatus.Completed &&
+                           t.EndDate <= deadlineDate)
+                .OrderBy(t => t.EndDate)
+                .Select(t => new EmployeeTaskDto
+                {
+                    TaskId = t.Id,
+                    TaskTitle = t.Title,
+                    ProjectName = t.Project.Name,
+                    DueDate = t.EndDate,
+                    Priority = t.Priority.ToString(),
+                    Progress = t.Progress,
+                    EstimatedHours = t.EstimatedHours,
+                    LoggedHours = t.ActualHours,
+                    Status = t.Status.ToString()
+                })
+                .ToListAsync();
+        }
+
         public async Task<Project> CreateProjectAsync(CreateProjectDto projectDto)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
@@ -275,7 +550,7 @@ namespace DepartmentalSystemAPI.Services
                     Status = ProjectStatus.Planning,
                     Progress = 0,
                     ActualHours = 0,
-                    AssignedToUserName = projectDto.AssignedToUserName // FIXED: Use the string field
+                    AssignedToUserName = projectDto.AssignedToUserName
                 };
 
                 _context.Projects.Add(project);
@@ -318,7 +593,7 @@ namespace DepartmentalSystemAPI.Services
                 project.Budget = projectDto.Budget;
                 project.EstimatedHours = projectDto.EstimatedHours;
                 project.ClientName = projectDto.ClientName;
-                project.AssignedToUserName = projectDto.AssignedToUserName; // FIXED: Use the string field
+                project.AssignedToUserName = projectDto.AssignedToUserName;
 
                 await _context.SaveChangesAsync();
 
@@ -399,12 +674,11 @@ namespace DepartmentalSystemAPI.Services
                     TaskCount = p.Tasks.Count,
                     CompletedTasks = p.Tasks.Count(t => t.Status == ProjectTaskStatus.Completed),
                     ClientName = p.ClientName,
-                    AssignedToUserName = p.AssignedToUserName // FIXED: Use the string field directly
+                    AssignedToUserName = p.AssignedToUserName
                 })
                 .ToListAsync();
         }
 
-        // ADD THIS METHOD TO YOUR EXISTING PROJECT SERVICE CLASS
         private async Task SendProjectAssignmentEmailAsync(Project project)
         {
             try
